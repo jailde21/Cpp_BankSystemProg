@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="CppCLR_WinFormsProject1/CppCLR_WinFormsProject1.vcxproj" Id="f6835033-e9ae-4b80-938c-e394c9e74361" />
+</Solution>
