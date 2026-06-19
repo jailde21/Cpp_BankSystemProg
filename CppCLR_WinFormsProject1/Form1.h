@@ -1,12 +1,13 @@
 ﻿#pragma once
 
-// СТРОГО НА ПЕРВОЙ СТРОЧКЕ для предотвращения конфликта servprov.h!
-#include "DatabaseManager.h" 
+// Подключаем БД строго первым!
+#include "DatabaseManager.h"
 
 #include "BankCore.h"
 #include "AddClientForm.h"
 #include "AccountOperationForm.h"
 #include "sqlite3.h"
+#include "StatsManager.h"
 
 namespace CppCLRWinFormsProject {
     using namespace System;
@@ -23,11 +24,17 @@ namespace CppCLRWinFormsProject {
         List<Client^>^ allClients;
     private:
         Client^ currentClient;
+
+        // Базовые панели распределения интерфейса
         Panel^ panelSidebar;
         Panel^ panelContentArea;
+
+        // Общие элементы бокового меню
         Label^ lblMenuTitle;
         Button^ btnDashboard;
         Button^ btnClients;
+        Button^ btnStats;
+        Button^ btnAbout;
 
         // ВКЛАДКА 1: ДАШБОРД
         Panel^ panelDashboardView;
@@ -59,38 +66,50 @@ namespace CppCLRWinFormsProject {
         Button^ btnAddClient;
         Button^ btnDeleteClient;
 
+        // ВКЛАДКА 3: СТАТИСТИКА
+        Panel^ panelStatsView;
+
+        // ВКЛАДКА 4: О ПРОГРАММЕ
+        Panel^ panelAboutView;
+        Panel^ cardAboutInfo;
+        Panel^ cardAboutHelp;
+
     public:
         Form1(void)
         {
             InitializeComponent();
             allClients = gcnew List<Client^>();
 
-            // Инициализация и безопасная загрузка данных из SQLite
+            // 1. ИСПРАВЛЕНО: Грузим реальные данные из SQLite
             try {
                 DatabaseManager::InitializeDatabase();
                 allClients = DatabaseManager::LoadAllData();
             }
-            catch (Exception^) {
-                // Защита от сбоев инициализации
-            }
+            catch (Exception^) {}
 
-            // Если база данных абсолютно пустая (первый запуск), создаем демо-данные
+            // Если база пуста (первый запуск), создаем мок-данные и сразу сохраняем
             if (allClients == nullptr || allClients->Count == 0) {
                 if (allClients == nullptr) allClients = gcnew List<Client^>();
                 CreateMockData();
-                DatabaseManager::SaveAllData(allClients); // Сразу сохраняем демо-данные в файл
+                DatabaseManager::SaveAllData(allClients);
             }
 
             // Привязки кликов для навигации
             this->btnDashboard->Click += gcnew System::EventHandler(this, &Form1::OnDashboardClick);
             this->btnClients->Click += gcnew System::EventHandler(this, &Form1::OnClientsClick);
+            this->btnStats->Click += gcnew System::EventHandler(this, &Form1::OnStatsClick);
+            this->btnAbout->Click += gcnew System::EventHandler(this, &Form1::OnAboutClick);
 
-            // Регистрация событий кнопок управления клиентами
+            // Привязка обработчиков для ПОИСКА
+            this->btnSearchDash->Click += gcnew System::EventHandler(this, &Form1::OnSearchDashClick);
+            this->btnSearchClients->Click += gcnew System::EventHandler(this, &Form1::OnSearchClientsClick);
+
+            // Регистрация событий кнопок действий
             this->btnAddClient->Click += gcnew System::EventHandler(this, &Form1::OnAddClientClick);
             this->btnDeleteClient->Click += gcnew System::EventHandler(this, &Form1::OnDeleteClientClick);
             this->gridAllClients->CellDoubleClick += gcnew System::Windows::Forms::DataGridViewCellEventHandler(this, &Form1::GridAllClients_CellDoubleClick);
 
-            // Связываем кнопки операций с логикой обработки данных
+            // Связываем кнопки операций
             this->btnInterest->Click += gcnew System::EventHandler(this, &Form1::btnAddInterest_Click);
             this->btnWithdraw->Click += gcnew System::EventHandler(this, &Form1::btnWithdraw_Click);
             this->btnDeposit->Click += gcnew System::EventHandler(this, &Form1::btnDeposit_Click);
@@ -103,8 +122,10 @@ namespace CppCLRWinFormsProject {
             // Подписка на ручную отрисовку плавных границ у прозрачных кнопок меню
             this->btnDashboard->Paint += gcnew System::Windows::Forms::PaintEventHandler(this, &Form1::OnButtonPaint);
             this->btnClients->Paint += gcnew System::Windows::Forms::PaintEventHandler(this, &Form1::OnButtonPaint);
+            this->btnStats->Paint += gcnew System::Windows::Forms::PaintEventHandler(this, &Form1::OnButtonPaint);
+            this->btnAbout->Paint += gcnew System::Windows::Forms::PaintEventHandler(this, &Form1::OnButtonPaint);
 
-            // Скругление элементов через GraphicsPath
+            // Скругление элементов
             this->Load += gcnew System::EventHandler(this, &Form1::Form1_Load);
 
             // Первоначальный вывод данных в таблицы
@@ -117,6 +138,8 @@ namespace CppCLRWinFormsProject {
             // Стартовое состояние вкладок
             panelDashboardView->Visible = true;
             panelClientsView->Visible = false;
+            panelStatsView->Visible = false;
+            panelAboutView->Visible = false;
         }
 
         static int CompareByDateDesc(BankTransaction^ a, BankTransaction^ b) {
@@ -126,7 +149,6 @@ namespace CppCLRWinFormsProject {
             if (parseA && parseB) return dateB.CompareTo(dateA);
             return b->Date->CompareTo(a->Date);
         }
-
         static int CompareByDateAsc(BankTransaction^ a, BankTransaction^ b) {
             DateTime dateA, dateB;
             bool parseA = DateTime::TryParse(a->Date, dateA);
@@ -159,104 +181,113 @@ namespace CppCLRWinFormsProject {
             allClients->Add(cl2);
         }
 
-        // 1. Кнопка "Начисление процента"
+        void OnSearchDashClick(System::Object^ sender, System::EventArgs^ e) {
+            String^ searchQuery = txtSearchDash->Text->Trim();
+            if (String::IsNullOrEmpty(searchQuery)) {
+                MessageBox::Show(L"Введите ID клиента для поиска!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning);
+                return;
+            }
+
+            Client^ foundClient = nullptr;
+            for each(Client ^ cl in allClients) {
+                if (cl->Id->Equals(searchQuery, StringComparison::OrdinalIgnoreCase)) {
+                    foundClient = cl;
+                    break;
+                }
+            }
+
+            if (foundClient != nullptr) {
+                ShowClientData(foundClient);
+            }
+            else {
+                MessageBox::Show(L"Клиент с ID '" + searchQuery + L"' не найден в системе.", L"Результаты поиска", MessageBoxButtons::OK, MessageBoxIcon::Information);
+            }
+        }
+
+        void OnSearchClientsClick(System::Object^ sender, System::EventArgs^ e) {
+            String^ searchQuery = txtSearchClients->Text->Trim();
+            LoadAllClientsGrid(searchQuery);
+        }
+
+        // 2. ИСПРАВЛЕНО: Полная логика операций с сохранением в БД
         System::Void btnAddInterest_Click(System::Object^ sender, System::EventArgs^ e) {
             if (currentClient == nullptr) { MessageBox::Show(L"Выберите клиента!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
-
             AccountOperationForm^ form = gcnew AccountOperationForm(AccountOpType::Interest, L"Сберегательный");
             if (form->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
-                double pct = 0;
-                if (Double::TryParse(form->EnteredAmount, pct) && pct > 0) {
-                    bool applied = false;
-                    for each (BankAccount ^ acc in currentClient->Accounts) {
-                        if (acc->GetAccountType() == form->SelectedAccountType) {
-                            double interest = acc->Balance * (pct / 100.0);
-                            acc->Balance += interest;
-                            acc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Проценты", interest));
-                            applied = true;
-                        }
-                    }
-                    if (applied) {
-                        DatabaseManager::SaveAllData(allClients); // Сохраняем в SQLite
-                        ShowClientData(currentClient);
-                        MessageBox::Show(L"Проценты успешно начислены всем счетам выбранного типа!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
-                    }
-                    else {
-                        MessageBox::Show(L"У клиента нет активных счетов выбранного типа!", L"Предупреждение", MessageBoxButtons::OK, MessageBoxIcon::Warning);
+                double pct = Double::Parse(form->EnteredAmount);
+                bool applied = false;
+                for each(BankAccount ^ acc in currentClient->Accounts) {
+                    if (acc->GetAccountType() == form->SelectedAccountType) {
+                        double interest = acc->Balance * (pct / 100.0);
+                        acc->Balance += interest;
+                        acc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Проценты", interest));
+                        applied = true;
                     }
                 }
+                if (applied) {
+                    DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
+                    ShowClientData(currentClient);
+                    MessageBox::Show(L"Проценты успешно начислены!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
+                }
                 else {
-                    MessageBox::Show(L"Введена некорректная процентная ставка!", L"Ошибка", MessageBoxButtons::OK, MessageBoxIcon::Error);
+                    MessageBox::Show(L"У клиента нет счетов выбранного типа!", L"Ошибка", MessageBoxButtons::OK, MessageBoxIcon::Warning);
                 }
             }
         }
 
-        // 2. Кнопка "Снять со счета"
         System::Void btnWithdraw_Click(System::Object^ sender, System::EventArgs^ e) {
             if (currentClient == nullptr) { MessageBox::Show(L"Выберите клиента!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
             if (gridAccounts->CurrentRow == nullptr || gridAccounts->CurrentRow->Index < 0) { MessageBox::Show(L"Выберите конкретный счет в таблице!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
 
             String^ accNum = gridAccounts->CurrentRow->Cells[1]->Value->ToString();
             BankAccount^ targetAcc = nullptr;
-            for each (BankAccount ^ acc in currentClient->Accounts) {
+            for each(BankAccount ^ acc in currentClient->Accounts) {
                 if (acc->Number == accNum) { targetAcc = acc; break; }
             }
             if (targetAcc == nullptr) return;
 
             AccountOperationForm^ form = gcnew AccountOperationForm(AccountOpType::Withdraw, targetAcc->GetAccountType());
             if (form->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
-                double amt = 0;
-                if (Double::TryParse(form->EnteredAmount, amt) && amt > 0) {
-                    if (targetAcc->Balance >= amt || targetAcc->GetAccountType() == L"Кредитный") {
-                        targetAcc->Balance -= amt;
-                        targetAcc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Снятие", amt));
+                double amt = Double::Parse(form->EnteredAmount);
+                if (targetAcc->Balance >= amt || targetAcc->GetAccountType() == L"Кредитный") {
+                    targetAcc->Balance -= amt;
+                    targetAcc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Снятие", amt));
 
-                        DatabaseManager::SaveAllData(allClients); // Сохраняем в SQLite
-                        ShowClientData(currentClient);
-                        MessageBox::Show(L"Сумма успешно списана со счета!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
-                    }
-                    else {
-                        MessageBox::Show(L"Недостаточно средств на выбранном счете!", L"Ошибка операции", MessageBoxButtons::OK, MessageBoxIcon::Error);
-                    }
+                    DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
+                    ShowClientData(currentClient);
+                    MessageBox::Show(L"Сумма успешно списана!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
                 }
                 else {
-                    MessageBox::Show(L"Введена некорректная сумма списания!", L"Ошибка", MessageBoxButtons::OK, MessageBoxIcon::Error);
+                    MessageBox::Show(L"Недостаточно средств!", L"Ошибка", MessageBoxButtons::OK, MessageBoxIcon::Error);
                 }
             }
         }
 
-        // 3. Кнопка "Пополнение счета"
         System::Void btnDeposit_Click(System::Object^ sender, System::EventArgs^ e) {
             if (currentClient == nullptr) { MessageBox::Show(L"Выберите клиента!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
-            if (gridAccounts->CurrentRow == nullptr || gridAccounts->CurrentRow->Index < 0) { MessageBox::Show(L"Выберите конкретный счет в таблице!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
+            if (gridAccounts->CurrentRow == nullptr || gridAccounts->CurrentRow->Index < 0) { MessageBox::Show(L"Выберите счет в таблице!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
 
             String^ accNum = gridAccounts->CurrentRow->Cells[1]->Value->ToString();
             BankAccount^ targetAcc = nullptr;
-            for each (BankAccount ^ acc in currentClient->Accounts) {
+            for each(BankAccount ^ acc in currentClient->Accounts) {
                 if (acc->Number == accNum) { targetAcc = acc; break; }
             }
             if (targetAcc == nullptr) return;
 
             AccountOperationForm^ form = gcnew AccountOperationForm(AccountOpType::Deposit, nullptr);
             if (form->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
-                double amt = 0;
-                if (Double::TryParse(form->EnteredAmount, amt) && amt > 0) {
-                    targetAcc->Balance += amt;
-                    targetAcc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Пополнение", amt));
+                double amt = Double::Parse(form->EnteredAmount);
+                targetAcc->Balance += amt;
+                targetAcc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Пополнение", amt));
 
-                    DatabaseManager::SaveAllData(allClients); // Сохраняем в SQLite
-                    ShowClientData(currentClient);
-                    MessageBox::Show(L"Баланс счета успешно пополнен!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
-                }
-                else {
-                    MessageBox::Show(L"Введена некорректная сумма пополнения!", L"Ошибка", MessageBoxButtons::OK, MessageBoxIcon::Error);
-                }
+                DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
+                ShowClientData(currentClient);
+                MessageBox::Show(L"Счет пополнен!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
             }
         }
 
-        // 4. Кнопка "Открытие счета"
         System::Void btnOpenAccount_Click(System::Object^ sender, System::EventArgs^ e) {
-            if (currentClient == nullptr) { MessageBox::Show(L"Выберите клиента для открытия счета!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
+            if (currentClient == nullptr) { MessageBox::Show(L"Выберите клиента!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
 
             AccountOperationForm^ form = gcnew AccountOperationForm(AccountOpType::Open, L"Дебетовый");
             if (form->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
@@ -271,10 +302,10 @@ namespace CppCLRWinFormsProject {
 
                 currentClient->Accounts->Add(newAcc);
 
-                DatabaseManager::SaveAllData(allClients); // Сохраняем в SQLite
+                DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
                 ShowClientData(currentClient);
                 LoadAllClientsGrid();
-                MessageBox::Show(L"Новый банковский счет успешно открыт!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
+                MessageBox::Show(L"Счет открыт!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
             }
         }
 
@@ -296,15 +327,13 @@ namespace CppCLRWinFormsProject {
 
             double total = 0;
             gridAccounts->Rows->Clear();
-
             List<BankTransaction^>^ filteredTransactions = gcnew List<BankTransaction^>();
 
-            for each (BankAccount ^ acc in cl->Accounts) {
+            for each(BankAccount ^ acc in cl->Accounts) {
                 total += acc->Balance;
                 gridAccounts->Rows->Add(acc->GetAccountType(), acc->Number, acc->Balance.ToString("N2") + " BYN");
 
-                for each (BankTransaction ^ tr in acc->History) {
-                    if (cbFilterType->SelectedItem == nullptr) continue;
+                for each(BankTransaction ^ tr in acc->History) {
                     String^ selectedFilter = cbFilterType->SelectedItem->ToString();
                     if (selectedFilter == "Все операции" || tr->Type == selectedFilter) {
                         filteredTransactions->Add(tr);
@@ -313,21 +342,13 @@ namespace CppCLRWinFormsProject {
             }
 
             int sortIndex = cbSortCriterion->SelectedIndex;
-            if (sortIndex == 0) {
-                filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByDateDesc));
-            }
-            else if (sortIndex == 1) {
-                filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByDateAsc));
-            }
-            else if (sortIndex == 2) {
-                filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByAmountDesc));
-            }
-            else if (sortIndex == 3) {
-                filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByAmountAsc));
-            }
+            if (sortIndex == 0) filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByDateDesc));
+            else if (sortIndex == 1) filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByDateAsc));
+            else if (sortIndex == 2) filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByAmountDesc));
+            else if (sortIndex == 3) filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByAmountAsc));
 
             listHistory->Items->Clear();
-            for each (BankTransaction ^ tr in filteredTransactions) {
+            for each(BankTransaction ^ tr in filteredTransactions) {
                 listHistory->Items->Add("Дата: " + tr->Date + " | Тип: " + tr->Type + " | Сумма: " + tr->Amount.ToString("N2") + " BYN");
             }
 
@@ -339,21 +360,29 @@ namespace CppCLRWinFormsProject {
         }
 
         void LoadAllClientsGrid() {
+            LoadAllClientsGrid(nullptr);
+        }
+
+        void LoadAllClientsGrid(String^ filterText) {
             gridAllClients->Rows->Clear();
-            for each (Client ^ cl in allClients) {
-                gridAllClients->Rows->Add(cl->Id, cl->FullName, cl->Phone, cl->Accounts->Count);
+            for each(Client ^ cl in allClients) {
+                if (String::IsNullOrEmpty(filterText) ||
+                    cl->FullName->IndexOf(filterText, StringComparison::OrdinalIgnoreCase) >= 0 ||
+                    cl->Phone->IndexOf(filterText, StringComparison::OrdinalIgnoreCase) >= 0 ||
+                    cl->Id->IndexOf(filterText, StringComparison::OrdinalIgnoreCase) >= 0)
+                {
+                    gridAllClients->Rows->Add(cl->Id, cl->FullName, cl->Phone, cl->Accounts->Count);
+                }
             }
         }
 
         void OnAddClientClick(System::Object^ sender, System::EventArgs^ e) {
             AddClientForm^ addForm = gcnew AddClientForm();
-
             if (addForm->btnCancel != nullptr) {
                 addForm->btnCancel->FlatStyle = FlatStyle::Flat;
                 addForm->btnCancel->FlatAppearance->BorderSize = 0;
                 addForm->btnCancel->BackColor = Color::Transparent;
                 addForm->btnCancel->ForeColor = Color::FromArgb(11, 0, 163);
-
                 RoundCorners(addForm->btnCancel, 15);
                 addForm->btnCancel->Paint += gcnew System::Windows::Forms::PaintEventHandler(this, &Form1::OnButtonPaint);
             }
@@ -372,9 +401,9 @@ namespace CppCLRWinFormsProject {
 
                 allClients->Add(newClient);
 
-                DatabaseManager::SaveAllData(allClients); // Намертво сохраняем нового клиента в SQLite!
-                LoadAllClientsGrid();
+                DatabaseManager::SaveAllData(allClients); // ИСПРАВЛЕНО: Сохраняем в базу данных!
 
+                LoadAllClientsGrid();
                 MessageBox::Show(L"Новый клиент успешно зарегистрирован!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
             }
         }
@@ -382,37 +411,45 @@ namespace CppCLRWinFormsProject {
         void OnDeleteClientClick(System::Object^ sender, System::EventArgs^ e) {
             if (gridAllClients->CurrentRow != nullptr && gridAllClients->CurrentRow->Index >= 0) {
                 String^ selectedId = gridAllClients->CurrentRow->Cells[0]->Value->ToString();
-                Client^ toRemove = nullptr;
-                for each (Client ^ cl in allClients) {
-                    if (cl->Id == selectedId) {
-                        toRemove = cl;
-                        break;
-                    }
-                }
-                if (toRemove != nullptr) {
-                    if (MessageBox::Show(L"Вы уверены, что хотите безвозвратно удалить клиента " + toRemove->FullName + L"?", L"Подтверждение", MessageBoxButtons::YesNo, MessageBoxIcon::Question) == System::Windows::Forms::DialogResult::Yes) {
-                        allClients->Remove(toRemove);
+                String^ selectedFIO = gridAllClients->CurrentRow->Cells[1]->Value->ToString();
 
-                        DatabaseManager::SaveAllData(allClients); // Обновляем SQLite
-                        LoadAllClientsGrid();
+                System::Windows::Forms::DialogResult result = MessageBox::Show(
+                    L"Вы уверены, что хотите полностью удалить клиента?\n\nФИО: " + selectedFIO + L"\nID: " + selectedId,
+                    L"Подтверждение удаления",
+                    MessageBoxButtons::YesNo,
+                    MessageBoxIcon::Warning
+                );
 
-                        if (currentClient == toRemove) {
-                            currentClient = allClients->Count > 0 ? allClients[0] : nullptr;
-                            ShowClientData(currentClient);
+                if (result == System::Windows::Forms::DialogResult::Yes) {
+                    for (int i = 0; i < allClients->Count; i++) {
+                        if (allClients[i]->Id == selectedId) {
+                            allClients->RemoveAt(i);
+                            break;
                         }
-                        MessageBox::Show(L"Клиент успешно удален из базы данных!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
                     }
+
+                    DatabaseManager::SaveAllData(allClients); // ИСПРАВЛЕНО: Перезаписываем базу без этого клиента!
+
+                    LoadAllClientsGrid();
+
+                    // Если удалили того, кто открыт на дашборде - сбрасываем дашборд
+                    if (currentClient != nullptr && currentClient->Id == selectedId) {
+                        currentClient = allClients->Count > 0 ? allClients[0] : nullptr;
+                        ShowClientData(currentClient);
+                    }
+
+                    MessageBox::Show(L"Клиент успешно удален из базы данных.", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
                 }
             }
             else {
-                MessageBox::Show(L"Выберите строку с клиентом для удаления!", L"Предупреждение", MessageBoxButtons::OK, MessageBoxIcon::Warning);
+                MessageBox::Show(L"Пожалуйста, выберите клиента в таблице!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning);
             }
         }
 
         void GridAllClients_CellDoubleClick(System::Object^ sender, System::Windows::Forms::DataGridViewCellEventArgs^ e) {
             if (e->RowIndex >= 0) {
                 String^ selectedId = gridAllClients->Rows[e->RowIndex]->Cells[0]->Value->ToString();
-                for each (Client ^ cl in allClients) {
+                for each(Client ^ cl in allClients) {
                     if (cl->Id == selectedId) {
                         ShowClientData(cl);
                         OnDashboardClick(nullptr, nullptr);
@@ -422,32 +459,75 @@ namespace CppCLRWinFormsProject {
             }
         }
 
-        void OnDashboardClick(System::Object^ sender, System::EventArgs^ e) {
-            panelDashboardView->Visible = true;
-            panelClientsView->Visible = false;
-            panelDashboardView->BringToFront();
-
-            btnDashboard->BackColor = Color::FromArgb(11, 0, 163);
-            btnDashboard->ForeColor = Color::White;
+        // ЛОГИКА НАВИГАЦИИ МЕЖДУ ВКЛАДКАМИ
+        void ResetMenuButtons() {
+            btnDashboard->BackColor = Color::Transparent;
+            btnDashboard->ForeColor = Color::FromArgb(11, 0, 163);
             btnClients->BackColor = Color::Transparent;
             btnClients->ForeColor = Color::FromArgb(11, 0, 163);
+            btnStats->BackColor = Color::Transparent;
+            btnStats->ForeColor = Color::FromArgb(11, 0, 163);
+            btnAbout->BackColor = Color::Transparent;
+            btnAbout->ForeColor = Color::FromArgb(11, 0, 163);
 
             btnDashboard->Invalidate();
             btnClients->Invalidate();
+            btnStats->Invalidate();
+            btnAbout->Invalidate();
+        }
+
+        void OnDashboardClick(System::Object^ sender, System::EventArgs^ e) {
+            panelDashboardView->Visible = true;
+            panelClientsView->Visible = false;
+            panelStatsView->Visible = false;
+            panelAboutView->Visible = false;
+            panelDashboardView->BringToFront();
+
+            ResetMenuButtons();
+            btnDashboard->BackColor = Color::FromArgb(11, 0, 163);
+            btnDashboard->ForeColor = Color::White;
+            btnDashboard->Invalidate();
         }
 
         void OnClientsClick(System::Object^ sender, System::EventArgs^ e) {
             panelDashboardView->Visible = false;
             panelClientsView->Visible = true;
+            panelStatsView->Visible = false;
+            panelAboutView->Visible = false;
             panelClientsView->BringToFront();
 
+            ResetMenuButtons();
             btnClients->BackColor = Color::FromArgb(11, 0, 163);
             btnClients->ForeColor = Color::White;
-            btnDashboard->BackColor = Color::Transparent;
-            btnDashboard->ForeColor = Color::FromArgb(11, 0, 163);
-
-            btnDashboard->Invalidate();
             btnClients->Invalidate();
+        }
+
+        void OnStatsClick(System::Object^ sender, System::EventArgs^ e) {
+            panelDashboardView->Visible = false;
+            panelClientsView->Visible = false;
+            panelStatsView->Visible = true;
+            panelAboutView->Visible = false;
+            panelStatsView->BringToFront();
+
+            ResetMenuButtons();
+            btnStats->BackColor = Color::FromArgb(11, 0, 163);
+            btnStats->ForeColor = Color::White;
+            btnStats->Invalidate();
+
+            StatsManager::RefreshStats(allClients);
+        }
+
+        void OnAboutClick(System::Object^ sender, System::EventArgs^ e) {
+            panelDashboardView->Visible = false;
+            panelClientsView->Visible = false;
+            panelStatsView->Visible = false;
+            panelAboutView->Visible = true;
+            panelAboutView->BringToFront();
+
+            ResetMenuButtons();
+            btnAbout->BackColor = Color::FromArgb(11, 0, 163);
+            btnAbout->ForeColor = Color::White;
+            btnAbout->Invalidate();
         }
 
         void OnButtonPaint(System::Object^ sender, System::Windows::Forms::PaintEventArgs^ e) {
@@ -456,10 +536,8 @@ namespace CppCLRWinFormsProject {
 
             if (btn->BackColor == Color::Transparent) {
                 e->Graphics->SmoothingMode = System::Drawing::Drawing2D::SmoothingMode::AntiAlias;
-
                 float radius = 15.0f;
                 System::Drawing::Drawing2D::GraphicsPath^ path = gcnew System::Drawing::Drawing2D::GraphicsPath();
-
                 float offset = 0.5f;
                 float width = btn->Width - 1.0f;
                 float height = btn->Height - 1.0f;
@@ -473,7 +551,6 @@ namespace CppCLRWinFormsProject {
 
                 Pen^ borderPen = gcnew Pen(Color::FromArgb(11, 0, 163), 1.2f);
                 e->Graphics->DrawPath(borderPen, path);
-
                 delete borderPen;
                 delete path;
             }
@@ -482,6 +559,8 @@ namespace CppCLRWinFormsProject {
         void Form1_Load(System::Object^ sender, System::EventArgs^ e) {
             RoundCorners(this->btnDashboard, 15);
             RoundCorners(this->btnClients, 15);
+            RoundCorners(this->btnStats, 15);
+            RoundCorners(this->btnAbout, 15);
             RoundCorners(this->btnDeposit, 15);
             RoundCorners(this->btnWithdraw, 15);
             RoundCorners(this->btnInterest, 15);
@@ -493,6 +572,8 @@ namespace CppCLRWinFormsProject {
             RoundCorners(this->btnSearchDash, 10);
             RoundCorners(this->btnSearchClients, 10);
             RoundCorners(this->panelHistoryTools, 10);
+            RoundCorners(this->cardAboutInfo, 18);
+            RoundCorners(this->cardAboutHelp, 18);
         }
 
         void RoundCorners(Control^ control, int radius) {
@@ -510,7 +591,6 @@ namespace CppCLRWinFormsProject {
         ~Form1() {
             if (components) delete components;
         }
-
     private:
         System::ComponentModel::Container^ components;
 
@@ -523,10 +603,11 @@ namespace CppCLRWinFormsProject {
 
             this->panelSidebar = (gcnew Panel());
             this->panelContentArea = (gcnew Panel());
-
             this->lblMenuTitle = (gcnew Label());
             this->btnDashboard = (gcnew Button());
             this->btnClients = (gcnew Button());
+            this->btnStats = (gcnew Button());
+            this->btnAbout = (gcnew Button());
 
             this->panelDashboardView = (gcnew Panel());
             this->lblLogoDash = (gcnew Label());
@@ -539,11 +620,9 @@ namespace CppCLRWinFormsProject {
             this->lblClientPhone = (gcnew Label());
             this->lblTotalBalance = (gcnew Label());
             this->gridAccounts = (gcnew DataGridView());
-
             this->panelHistoryTools = (gcnew Panel());
             this->cbSortCriterion = (gcnew ComboBox());
             this->cbFilterType = (gcnew ComboBox());
-
             this->listHistory = (gcnew ListBox());
             this->btnDeposit = (gcnew Button());
             this->btnWithdraw = (gcnew Button());
@@ -558,16 +637,18 @@ namespace CppCLRWinFormsProject {
             this->btnAddClient = (gcnew Button());
             this->btnDeleteClient = (gcnew Button());
 
+            this->panelAboutView = (gcnew Panel());
+            this->cardAboutInfo = (gcnew Panel());
+            this->cardAboutHelp = (gcnew Panel());
+
             this->SuspendLayout();
 
-            // Основное окно программы
             this->Size = System::Drawing::Size(1150, 700);
             this->Text = L"ООО \"ТМЫВ ДЕНЕГ\"";
             this->StartPosition = FormStartPosition::CenterScreen;
             this->FormBorderStyle = System::Windows::Forms::FormBorderStyle::FixedSingle;
             this->MaximizeBox = false;
 
-            // Левое меню (Sidebar)
             this->panelSidebar->Size = System::Drawing::Size(180, 700);
             this->panelSidebar->Dock = DockStyle::Left;
             this->panelSidebar->BackColor = bgContentGray;
@@ -577,7 +658,6 @@ namespace CppCLRWinFormsProject {
             this->lblMenuTitle->Location = System::Drawing::Point(20, 25);
             this->lblMenuTitle->Size = System::Drawing::Size(140, 30);
             this->lblMenuTitle->TextAlign = ContentAlignment::MiddleCenter;
-            this->lblMenuTitle->ForeColor = Color::Black;
 
             this->btnDashboard->Text = L"Дашборд";
             this->btnDashboard->Font = gcnew System::Drawing::Font("Arial", 11, FontStyle::Bold);
@@ -597,15 +677,33 @@ namespace CppCLRWinFormsProject {
             this->btnClients->Location = System::Drawing::Point(15, 125);
             this->btnClients->Size = System::Drawing::Size(150, 40);
 
+            this->btnStats->Text = L"Статистика";
+            this->btnStats->Font = gcnew System::Drawing::Font("Arial", 11, FontStyle::Bold);
+            this->btnStats->ForeColor = brandBlue;
+            this->btnStats->BackColor = Color::Transparent;
+            this->btnStats->FlatStyle = FlatStyle::Flat;
+            this->btnStats->FlatAppearance->BorderSize = 0;
+            this->btnStats->Location = System::Drawing::Point(15, 175);
+            this->btnStats->Size = System::Drawing::Size(150, 40);
+
+            this->btnAbout->Text = L"О программе";
+            this->btnAbout->Font = gcnew System::Drawing::Font("Arial", 11, FontStyle::Bold);
+            this->btnAbout->ForeColor = brandBlue;
+            this->btnAbout->BackColor = Color::Transparent;
+            this->btnAbout->FlatStyle = FlatStyle::Flat;
+            this->btnAbout->FlatAppearance->BorderSize = 0;
+            this->btnAbout->Location = System::Drawing::Point(15, 225);
+            this->btnAbout->Size = System::Drawing::Size(150, 40);
+
             this->panelSidebar->Controls->Add(this->lblMenuTitle);
             this->panelSidebar->Controls->Add(this->btnDashboard);
             this->panelSidebar->Controls->Add(this->btnClients);
+            this->panelSidebar->Controls->Add(this->btnStats);
+            this->panelSidebar->Controls->Add(this->btnAbout);
 
-            // Контентная область
             this->panelContentArea->Dock = DockStyle::Fill;
             this->panelContentArea->BackColor = bgContentGray;
 
-            // Слой: ДАШБОРД
             this->panelDashboardView->Size = System::Drawing::Size(970, 700);
             this->panelDashboardView->Dock = DockStyle::Fill;
             this->panelDashboardView->BackColor = bgContentGray;
@@ -628,7 +726,6 @@ namespace CppCLRWinFormsProject {
             this->btnSearchDash->Location = System::Drawing::Point(690, 20);
             this->btnSearchDash->Size = System::Drawing::Size(100, 32);
 
-            // Карточка клиента
             this->cardClientInfo->Location = System::Drawing::Point(25, 75);
             this->cardClientInfo->Size = System::Drawing::Size(450, 200);
             this->cardClientInfo->BackColor = Color::White;
@@ -666,7 +763,6 @@ namespace CppCLRWinFormsProject {
             this->cardClientInfo->Controls->Add(this->lblClientPhone);
             this->cardClientInfo->Controls->Add(this->lblTotalBalance);
 
-            // Таблица счетов
             this->gridAccounts->ColumnCount = 3;
             this->gridAccounts->Columns[0]->Name = L"Тип";
             this->gridAccounts->Columns[0]->Width = 110;
@@ -680,10 +776,7 @@ namespace CppCLRWinFormsProject {
             this->gridAccounts->RowHeadersVisible = false;
             this->gridAccounts->AllowUserToAddRows = false;
             this->gridAccounts->ReadOnly = true;
-            this->gridAccounts->SelectionMode = DataGridViewSelectionMode::FullRowSelect;
-            this->gridAccounts->MultiSelect = false;
 
-            // Инструменты Сортировки и Фильтрации
             this->panelHistoryTools->Location = System::Drawing::Point(500, 75);
             this->panelHistoryTools->Size = System::Drawing::Size(420, 45);
             this->panelHistoryTools->BackColor = Color::White;
@@ -691,10 +784,8 @@ namespace CppCLRWinFormsProject {
             this->cbSortCriterion->DropDownStyle = ComboBoxStyle::DropDownList;
             this->cbSortCriterion->Font = gcnew System::Drawing::Font("Arial", 9);
             this->cbSortCriterion->Items->AddRange(gcnew array<Object^>{
-                L"Дата: От новых к старым",
-                    L"Дата: От старых к новым",
-                    L"Сумма: На возрастание",
-                    L"Сумма: На убывание"
+                L"Дата: От новых к старым", L"Дата: От старых к новым",
+                    L"Сумма: На возрастание", L"Сумма: На убывание"
             });
             this->cbSortCriterion->SelectedIndex = 0;
             this->cbSortCriterion->Location = System::Drawing::Point(10, 10);
@@ -703,25 +794,19 @@ namespace CppCLRWinFormsProject {
             this->cbFilterType->DropDownStyle = ComboBoxStyle::DropDownList;
             this->cbFilterType->Font = gcnew System::Drawing::Font("Arial", 9);
             this->cbFilterType->Items->AddRange(gcnew array<Object^>{
-                L"Все операции",
-                    L"Проценты",
-                    L"Снятие",
-                    L"Пополнение"
+                L"Все операции", L"Проценты", L"Снятие", L"Пополнение"
             });
             this->cbFilterType->SelectedIndex = 0;
             this->cbFilterType->Location = System::Drawing::Point(215, 10);
             this->cbFilterType->Size = System::Drawing::Size(195, 25);
-
             this->panelHistoryTools->Controls->Add(this->cbSortCriterion);
             this->panelHistoryTools->Controls->Add(this->cbFilterType);
 
-            // Список истории
             this->listHistory->Location = System::Drawing::Point(500, 125);
             this->listHistory->Size = System::Drawing::Size(420, 410);
             this->listHistory->BackColor = Color::White;
             this->listHistory->Font = gcnew System::Drawing::Font("Arial", 9);
 
-            // Кнопки нижнего меню Дашборда
             this->btnDeposit->Text = L"Пополнить счет";
             this->btnDeposit->Font = gcnew System::Drawing::Font("Arial", 10, FontStyle::Bold);
             this->btnDeposit->ForeColor = Color::White;
@@ -770,7 +855,6 @@ namespace CppCLRWinFormsProject {
             this->panelDashboardView->Controls->Add(this->btnInterest);
             this->panelDashboardView->Controls->Add(this->btnNewAccount);
 
-            // Слой: КЛИЕНТЫ
             this->panelClientsView->Size = System::Drawing::Size(970, 700);
             this->panelClientsView->Dock = DockStyle::Fill;
             this->panelClientsView->BackColor = bgContentGray;
@@ -808,10 +892,7 @@ namespace CppCLRWinFormsProject {
             this->gridAllClients->RowHeadersVisible = false;
             this->gridAllClients->AllowUserToAddRows = false;
             this->gridAllClients->ReadOnly = true;
-            this->gridAllClients->SelectionMode = DataGridViewSelectionMode::FullRowSelect;
-            this->gridAllClients->MultiSelect = false;
 
-            // КНОПКА: Регистрация клиента
             this->btnAddClient->Text = L"Регистрация клиента";
             this->btnAddClient->Font = gcnew System::Drawing::Font("Arial", 10, FontStyle::Bold);
             this->btnAddClient->ForeColor = Color::White;
@@ -821,7 +902,6 @@ namespace CppCLRWinFormsProject {
             this->btnAddClient->Location = System::Drawing::Point(265, 560);
             this->btnAddClient->Size = System::Drawing::Size(210, 45);
 
-            // КНОПКА: Удалить клиента
             this->btnDeleteClient->Text = L"Удалить клиента";
             this->btnDeleteClient->Font = gcnew System::Drawing::Font("Arial", 10, FontStyle::Bold);
             this->btnDeleteClient->ForeColor = Color::White;
@@ -838,9 +918,78 @@ namespace CppCLRWinFormsProject {
             this->panelClientsView->Controls->Add(this->btnAddClient);
             this->panelClientsView->Controls->Add(this->btnDeleteClient);
 
-            // СБОРКА И ВЫВОД СЛОЕВ НА ЭКРАН
+            this->panelAboutView->Size = System::Drawing::Size(970, 700);
+            this->panelAboutView->Dock = DockStyle::Fill;
+            this->panelAboutView->BackColor = bgContentGray;
+
+            Label^ lblAboutTitle = gcnew Label();
+            lblAboutTitle->Text = L"О программе и Справка";
+            lblAboutTitle->Font = gcnew System::Drawing::Font("Arial", 16, FontStyle::Bold);
+            lblAboutTitle->Location = System::Drawing::Point(25, 20);
+            lblAboutTitle->Size = System::Drawing::Size(400, 35);
+            this->panelAboutView->Controls->Add(lblAboutTitle);
+
+            this->cardAboutInfo->Location = System::Drawing::Point(25, 75);
+            this->cardAboutInfo->Size = System::Drawing::Size(895, 140);
+            this->cardAboutInfo->BackColor = Color::White;
+
+            Label^ lblSystemName = gcnew Label();
+            lblSystemName->Text = L"Автоматизированная Банковская Система «ООО ТМЫВ ДЕНЕГ»";
+            lblSystemName->Font = gcnew System::Drawing::Font("Arial", 12, FontStyle::Bold);
+            lblSystemName->ForeColor = brandBlue;
+            lblSystemName->Location = System::Drawing::Point(20, 15);
+            lblSystemName->Size = System::Drawing::Size(800, 25);
+            lblSystemName->BackColor = Color::Transparent;
+            this->cardAboutInfo->Controls->Add(lblSystemName);
+
+            Label^ lblAuthorInfo = gcnew Label();
+            lblAuthorInfo->Text = L"Разработчик: Студент Мазнев Артем Александрович\n" +
+                L"Версия ПО: 3.0.0 \n" +
+                L"Стек технологий: C++/CLI, Windows Forms, SQLite 3, GDI+ Graphics Engine";
+            lblAuthorInfo->Font = gcnew System::Drawing::Font("Arial", 10);
+            lblAuthorInfo->Location = System::Drawing::Point(20, 50);
+            lblAuthorInfo->Size = System::Drawing::Size(800, 70);
+            lblAuthorInfo->BackColor = Color::Transparent;
+            this->cardAboutInfo->Controls->Add(lblAuthorInfo);
+            this->panelAboutView->Controls->Add(this->cardAboutInfo);
+
+            this->cardAboutHelp->Location = System::Drawing::Point(25, 235);
+            this->cardAboutHelp->Size = System::Drawing::Size(895, 310);
+            this->cardAboutHelp->BackColor = Color::White;
+
+            Label^ lblHelpTitle = gcnew Label();
+            lblHelpTitle->Text = L"Инструкция по использованию поисковой подсистемы";
+            lblHelpTitle->Font = gcnew System::Drawing::Font("Arial", 12, FontStyle::Bold);
+            lblHelpTitle->Location = System::Drawing::Point(20, 15);
+            lblHelpTitle->Size = System::Drawing::Size(800, 25);
+            lblHelpTitle->BackColor = Color::Transparent;
+            this->cardAboutHelp->Controls->Add(lblHelpTitle);
+
+            Label^ lblHelpText = gcnew Label();
+            lblHelpText->Text = L"• На Дашборде:\n" +
+                L"  Поиск работает строго по ID клиента (Регистронезависимый).\n" +
+                L"  Если клиент найден — программа тут же подгружает его данные, счета и историю операций.\n" +
+                L"  Если нет — выводит аккуратное информационное уведомление.\n\n" +
+                L"• В разделе Клиенты:\n" +
+                L"  Поиск сделан «умным» и гибким. При нажатии кнопки «ПОИСК» таблица автоматически\n" +
+                L"  фильтруется по любому частичному совпадению: можно свободно искать по ФИО,\n" +
+                L"  по номеру мобильного телефона или по уникальному ID.\n\n" +
+                L"• Сброс фильтрации:\n" +
+                L"  Чтобы сбросить результаты поиска и вернуть полный список всех клиентов,\n" +
+                L"  достаточно очистить текстовое поле ввода и нажать кнопку «ПОИСК».";
+            lblHelpText->Font = gcnew System::Drawing::Font("Arial", 10);
+            lblHelpText->Location = System::Drawing::Point(20, 55);
+            lblHelpText->AutoSize = true;
+            lblHelpText->BackColor = Color::Transparent;
+            this->cardAboutHelp->Controls->Add(lblHelpText);
+            this->panelAboutView->Controls->Add(this->cardAboutHelp);
+
+            this->panelStatsView = StatsManager::CreateStatsPanel(970, 700);
+
             this->panelContentArea->Controls->Add(this->panelDashboardView);
             this->panelContentArea->Controls->Add(this->panelClientsView);
+            this->panelContentArea->Controls->Add(this->panelStatsView);
+            this->panelContentArea->Controls->Add(this->panelAboutView);
 
             this->panelDashboardView->BringToFront();
 

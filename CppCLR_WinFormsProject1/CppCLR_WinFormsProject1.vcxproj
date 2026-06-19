@@ -145,6 +145,7 @@
     </ClInclude>
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="StatsManager.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AccountOperationForm.cpp" />

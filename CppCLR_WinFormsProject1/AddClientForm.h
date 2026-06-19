@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 namespace CppCLRWinFormsProject {
 
@@ -12,13 +12,13 @@ namespace CppCLRWinFormsProject {
 	public ref class AddClientForm : public System::Windows::Forms::Form
 	{
 	private:
-		// Ýëåìåíòû èíòåðôåéñà
+		// Ð­Ð»ÐµÐ¼ÐµÐ½Ñ‚Ñ‹ Ð¸Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹ÑÐ°
 		Label^ lblHeader;
 		Label^ lblFIO;
 		Label^ lblPhone;
 
 	public:
-		// Ñâîéñòâà äëÿ òîãî, ÷òîáû ãëàâíàÿ ôîðìà ìîãëà çàáðàòü ââåäåííûå äàííûå
+		// Ð¡Ð²Ð¾Ð¹ÑÑ‚Ð²Ð° Ð´Ð»Ñ Ñ‚Ð¾Ð³Ð¾, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð³Ð»Ð°Ð²Ð½Ð°Ñ Ñ„Ð¾Ñ€Ð¼Ð° Ð¼Ð¾Ð³Ð»Ð° Ð·Ð°Ð±Ñ€Ð°Ñ‚ÑŒ Ð²Ð²ÐµÐ´ÐµÐ½Ð½Ñ‹Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ
 		TextBox^ txtFIO;
 		TextBox^ txtPhone;
 		Button^ btnSave;
@@ -27,7 +27,7 @@ namespace CppCLRWinFormsProject {
 		AddClientForm(void)
 		{
 			InitializeComponent();
-			// Ïðèâÿçûâàåì ñêðóãëåíèå êíîïîê íà çàãðóçêó ôîðìû
+			// ÐŸÑ€Ð¸Ð²ÑÐ·Ñ‹Ð²Ð°ÐµÐ¼ ÑÐºÑ€ÑƒÐ³Ð»ÐµÐ½Ð¸Ðµ ÐºÐ½Ð¾Ð¿Ð¾Ðº Ð½Ð° Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÑƒ Ñ„Ð¾Ñ€Ð¼Ñ‹
 			this->Load += gcnew System::EventHandler(this, &AddClientForm::AddClientForm_Load);
 		}
 
@@ -56,25 +56,25 @@ namespace CppCLRWinFormsProject {
 
 			this->SuspendLayout();
 
-			// Íàñòðîéêè ñàìîãî îêíà
+			// ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ ÑÐ°Ð¼Ð¾Ð³Ð¾ Ð¾ÐºÐ½Ð°
 			this->Size = System::Drawing::Size(420, 320);
-			this->Text = L"Íîâûé êëèåíò";
-			this->StartPosition = FormStartPosition::CenterParent; // Îòêðûâàåòñÿ ñòðîãî ïî öåíòðó ãëàâíîãî îêíà
+			this->Text = L"ÐÐ¾Ð²Ñ‹Ð¹ ÐºÐ»Ð¸ÐµÐ½Ñ‚";
+			this->StartPosition = FormStartPosition::CenterParent; 
 			this->FormBorderStyle = System::Windows::Forms::FormBorderStyle::FixedDialog;
 			this->MaximizeBox = false;
 			this->MinimizeBox = false;
 			this->BackColor = bgGray;
 
-			// Çàãîëîâîê
-			this->lblHeader->Text = L"ÐÅÃÈÑÒÐÀÖÈß ÊËÈÅÍÒÀ";
+			// Ð—Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº
+			this->lblHeader->Text = L"Ð Ð•Ð“Ð˜Ð¡Ð¢Ð ÐÐ¦Ð˜Ð¯ ÐšÐ›Ð˜Ð•ÐÐ¢Ð";
 			this->lblHeader->Font = gcnew System::Drawing::Font("Arial", 12, FontStyle::Bold);
 			this->lblHeader->ForeColor = brandBlue;
 			this->lblHeader->Location = System::Drawing::Point(20, 20);
 			this->lblHeader->Size = System::Drawing::Size(360, 30);
 			this->lblHeader->TextAlign = ContentAlignment::MiddleCenter;
 
-			// Ïîëå ÔÈÎ
-			this->lblFIO->Text = L"ÔÈÎ Êëèåíòà:";
+			// ÐŸÐ¾Ð»Ðµ Ð¤Ð˜Ðž
+			this->lblFIO->Text = L"Ð¤Ð˜Ðž ÐšÐ»Ð¸ÐµÐ½Ñ‚Ð°:";
 			this->lblFIO->Font = gcnew System::Drawing::Font("Arial", 10, FontStyle::Bold);
 			this->lblFIO->Location = System::Drawing::Point(30, 70);
 			this->lblFIO->Size = System::Drawing::Size(340, 20);
@@ -83,8 +83,8 @@ namespace CppCLRWinFormsProject {
 			this->txtFIO->Location = System::Drawing::Point(30, 95);
 			this->txtFIO->Size = System::Drawing::Size(340, 26);
 
-			// Ïîëå Òåëåôîí
-			this->lblPhone->Text = L"Íîìåð òåëåôîíà:";
+			// ÐŸÐ¾Ð»Ðµ Ð¢ÐµÐ»ÐµÑ„Ð¾Ð½
+			this->lblPhone->Text = L"ÐÐ¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°:";
 			this->lblPhone->Font = gcnew System::Drawing::Font("Arial", 10, FontStyle::Bold);
 			this->lblPhone->Location = System::Drawing::Point(30, 140);
 			this->lblPhone->Size = System::Drawing::Size(340, 20);
@@ -93,18 +93,18 @@ namespace CppCLRWinFormsProject {
 			this->txtPhone->Location = System::Drawing::Point(30, 165);
 			this->txtPhone->Size = System::Drawing::Size(340, 26);
 
-			// Êíîïêà Ñîõðàíèòü
-			this->btnSave->Text = L"Ñîçäàòü";
+			// ÐšÐ½Ð¾Ð¿ÐºÐ° Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ
+			this->btnSave->Text = L"Ð¡Ð¾Ð·Ð´Ð°Ñ‚ÑŒ";
 			this->btnSave->Font = gcnew System::Drawing::Font("Arial", 10, FontStyle::Bold);
 			this->btnSave->ForeColor = Color::White;
 			this->btnSave->BackColor = brandBlue;
 			this->btnSave->FlatStyle = FlatStyle::Flat;
 			this->btnSave->Location = System::Drawing::Point(30, 220);
 			this->btnSave->Size = System::Drawing::Size(160, 40);
-			this->btnSave->DialogResult = System::Windows::Forms::DialogResult::OK; // Àâòî-çàêðûòèå îêíà ñ ðåçóëüòàòîì OK
+			this->btnSave->DialogResult = System::Windows::Forms::DialogResult::OK; // ÐÐ²Ñ‚Ð¾-Ð·Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ Ð¾ÐºÐ½Ð° Ñ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð¾Ð¼ OK
 
-			// Êíîïêà Îòìåíà
-			this->btnCancel->Text = L"Îòìåíà";
+			// ÐšÐ½Ð¾Ð¿ÐºÐ° ÐžÑ‚Ð¼ÐµÐ½Ð°
+			this->btnCancel->Text = L"ÐžÑ‚Ð¼ÐµÐ½Ð°";
 			this->btnCancel->Font = gcnew System::Drawing::Font("Arial", 10, FontStyle::Bold);
 			this->btnCancel->ForeColor = brandBlue;
 			this->btnCancel->BackColor = Color::Transparent;
@@ -112,9 +112,9 @@ namespace CppCLRWinFormsProject {
 			this->btnCancel->FlatAppearance->BorderColor = brandBlue;
 			this->btnCancel->Location = System::Drawing::Point(210, 220);
 			this->btnCancel->Size = System::Drawing::Size(160, 40);
-			this->btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel; // Àâòî-çàêðûòèå îêíà ñ ðåçóëüòàòîì Cancel
+			this->btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel; // ÐÐ²Ñ‚Ð¾-Ð·Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ Ð¾ÐºÐ½Ð° Ñ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð¾Ð¼ Cancel
 
-			// Äîáàâëÿåì ýëåìåíòû íà ôîðìó
+			// Ð”Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ñ‹ Ð½Ð° Ñ„Ð¾Ñ€Ð¼Ñƒ
 			this->Controls->Add(this->lblHeader);
 			this->Controls->Add(this->lblFIO);
 			this->Controls->Add(this->txtFIO);
@@ -129,7 +129,7 @@ namespace CppCLRWinFormsProject {
 #pragma endregion
 
 	private:
-		// Ñêðóãëåíèå óãëîâ äëÿ êíîïîê íîâîãî îêíà
+		// Ð¡ÐºÑ€ÑƒÐ³Ð»ÐµÐ½Ð¸Ðµ ÑƒÐ³Ð»Ð¾Ð² Ð´Ð»Ñ ÐºÐ½Ð¾Ð¿Ð¾Ðº Ð½Ð¾Ð²Ð¾Ð³Ð¾ Ð¾ÐºÐ½Ð°
 		void AddClientForm_Load(System::Object^ sender, System::EventArgs^ e) {
 			RoundCorners(this->btnSave, 15);
 			RoundCorners(this->btnCancel, 15);

@@ -1,11 +1,11 @@
 #pragma once
 
-// Нативные инклуды строго на самом верху (до System)!
+// Нативные инклуды строго на самом верху (обязательно до System!!!!)
 #include "sqlite3.h"
 #include <string>
 #include <msclr/marshal_cppstd.h>
 
-// Подключаем классы нашего банка (Client, Account и т.д.)
+// Подключаем классы банка (Client, Account)
 #include "BankCore.h"
 
 namespace CppCLRWinFormsProject {
