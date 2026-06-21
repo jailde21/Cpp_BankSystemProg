@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-// Подключаем БД строго первым!
+// Подключаем БД 
 #include "DatabaseManager.h"
 
 #include "BankCore.h"
@@ -90,7 +90,7 @@ namespace CppCLRWinFormsProject {
             // Если база пуста (первый запуск), создаем мок-данные и сразу сохраняем
             if (allClients == nullptr || allClients->Count == 0) {
                 if (allClients == nullptr) allClients = gcnew List<Client^>();
-                CreateMockData();
+                // CreateMockData();
                 DatabaseManager::SaveAllData(allClients);
             }
 
@@ -164,23 +164,6 @@ namespace CppCLRWinFormsProject {
         }
 
     private:
-        void CreateMockData() {
-            Client^ cl1 = gcnew Client("TD-2026-4629", "Артем Мазнев Александрович", "+375 29 475 19 60");
-            cl1->Accounts->Add(gcnew DebitAccount("BY13 3242 3242", 33432.22));
-            cl1->Accounts->Add(gcnew SavingsAccount("BY56 3242 4565", 1200.50));
-            cl1->Accounts->Add(gcnew CreditAccount("BY46 5755 0987", -450.00));
-
-            cl1->Accounts[0]->History->Add(gcnew BankTransaction("2026-06-10", "Перевод", 12500.0));
-            cl1->Accounts[1]->History->Add(gcnew BankTransaction("2026-06-15", "Проценты", 1432.22));
-            cl1->Accounts[0]->History->Add(gcnew BankTransaction("2026-06-12", "Снятие", 500.0));
-            cl1->Accounts[0]->History->Add(gcnew BankTransaction("2026-05-20", "Пополнение", 450.0));
-            allClients->Add(cl1);
-
-            Client^ cl2 = gcnew Client("TD-2026-4630", "Владимир Забавский Владимирович", "+375 29 457 33 77");
-            cl2->Accounts->Add(gcnew DebitAccount("BY88 1111 2222", 5000.00));
-            allClients->Add(cl2);
-        }
-
         void OnSearchDashClick(System::Object^ sender, System::EventArgs^ e) {
             String^ searchQuery = txtSearchDash->Text->Trim();
             if (String::IsNullOrEmpty(searchQuery)) {
@@ -209,15 +192,21 @@ namespace CppCLRWinFormsProject {
             LoadAllClientsGrid(searchQuery);
         }
 
-        // 2. ИСПРАВЛЕНО: Полная логика операций с сохранением в БД
         System::Void btnAddInterest_Click(System::Object^ sender, System::EventArgs^ e) {
             if (currentClient == nullptr) { MessageBox::Show(L"Выберите клиента!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
             AccountOperationForm^ form = gcnew AccountOperationForm(AccountOpType::Interest, L"Сберегательный");
             if (form->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
                 double pct = Double::Parse(form->EnteredAmount);
                 bool applied = false;
+
+                String^ selectedType = form->SelectedAccountType;
+                if (selectedType != nullptr) selectedType = selectedType->Trim()->ToLower();
+
                 for each(BankAccount ^ acc in currentClient->Accounts) {
-                    if (acc->GetAccountType() == form->SelectedAccountType) {
+                    String^ accType = acc->GetAccountType();
+                    if (accType != nullptr) accType = accType->Trim()->ToLower();
+
+                    if (accType == selectedType || (accType == L"сберегательный" && selectedType == "savings")) {
                         double interest = acc->Balance * (pct / 100.0);
                         acc->Balance += interest;
                         acc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Проценты", interest));
@@ -225,7 +214,7 @@ namespace CppCLRWinFormsProject {
                     }
                 }
                 if (applied) {
-                    DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
+                    DatabaseManager::SaveAllData(allClients);
                     ShowClientData(currentClient);
                     MessageBox::Show(L"Проценты успешно начислены!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
                 }
@@ -253,7 +242,7 @@ namespace CppCLRWinFormsProject {
                     targetAcc->Balance -= amt;
                     targetAcc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Снятие", amt));
 
-                    DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
+                    DatabaseManager::SaveAllData(allClients);
                     ShowClientData(currentClient);
                     MessageBox::Show(L"Сумма успешно списана!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
                 }
@@ -280,32 +269,56 @@ namespace CppCLRWinFormsProject {
                 targetAcc->Balance += amt;
                 targetAcc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Пополнение", amt));
 
-                DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
+                DatabaseManager::SaveAllData(allClients);
                 ShowClientData(currentClient);
                 MessageBox::Show(L"Счет пополнен!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
             }
         }
 
         System::Void btnOpenAccount_Click(System::Object^ sender, System::EventArgs^ e) {
-            if (currentClient == nullptr) { MessageBox::Show(L"Выберите клиента!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning); return; }
+            if (currentClient == nullptr) {
+                MessageBox::Show(L"Выберите клиента!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning);
+                return;
+            }
 
             AccountOperationForm^ form = gcnew AccountOperationForm(AccountOpType::Open, L"Дебетовый");
             if (form->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
                 String^ type = form->SelectedAccountType;
+
+                // ЗАЩИТА: Очищаем пробелы и переводим в нижний регистр для безопасного сравнения
+                if (type != nullptr) {
+                    type = type->Trim()->ToLower();
+                }
+                else {
+                    type = "";
+                }
+
                 Random^ rand = gcnew Random();
                 String^ newNum = "BY" + rand->Next(10, 99) + " 3242 " + rand->Next(1000, 9999);
 
-                BankAccount^ newAcc;
-                if (type == L"Дебетовый") newAcc = gcnew DebitAccount(newNum, 0.0);
-                else if (type == L"Сберегательный") newAcc = gcnew SavingsAccount(newNum, 0.0);
-                else newAcc = gcnew CreditAccount(newNum, 0.0);
+                BankAccount^ newAcc = nullptr;
 
-                currentClient->Accounts->Add(newAcc);
+                if (type->Contains(L"дебетовый") || type->Contains("debit")) {
+                    newAcc = gcnew DebitAccount(newNum, 0.0);
+                }
+                else if (type->Contains(L"сберегательный") || type->Contains("savings")) {
+                    newAcc = gcnew SavingsAccount(newNum, 0.0);
+                }
+                else if (type->Contains(L"кредитный") || type->Contains("credit")) {
+                    newAcc = gcnew CreditAccount(newNum, 0.0);
+                }
+                else {
+                    newAcc = gcnew DebitAccount(newNum, 0.0);
+                }
 
-                DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
-                ShowClientData(currentClient);
-                LoadAllClientsGrid();
-                MessageBox::Show(L"Счет открыт!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
+                if (newAcc != nullptr) {
+                    currentClient->Accounts->Add(newAcc);
+
+                    DatabaseManager::SaveAllData(allClients); // Сохраняем в БД!
+                    ShowClientData(currentClient);
+                    LoadAllClientsGrid();
+                    MessageBox::Show(L"Счет успешно открыт!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
+                }
             }
         }
 
@@ -400,8 +413,7 @@ namespace CppCLRWinFormsProject {
                 newClient->Accounts->Add(gcnew DebitAccount("BY" + rand->Next(10, 99) + " 3242 " + rand->Next(1000, 9999), 0.0));
 
                 allClients->Add(newClient);
-
-                DatabaseManager::SaveAllData(allClients); // ИСПРАВЛЕНО: Сохраняем в базу данных!
+                DatabaseManager::SaveAllData(allClients);
 
                 LoadAllClientsGrid();
                 MessageBox::Show(L"Новый клиент успешно зарегистрирован!", L"Успех", MessageBoxButtons::OK, MessageBoxIcon::Information);
@@ -428,11 +440,9 @@ namespace CppCLRWinFormsProject {
                         }
                     }
 
-                    DatabaseManager::SaveAllData(allClients); // ИСПРАВЛЕНО: Перезаписываем базу без этого клиента!
-
+                    DatabaseManager::SaveAllData(allClients);
                     LoadAllClientsGrid();
 
-                    // Если удалили того, кто открыт на дашборде - сбрасываем дашборд
                     if (currentClient != nullptr && currentClient->Id == selectedId) {
                         currentClient = allClients->Count > 0 ? allClients[0] : nullptr;
                         ShowClientData(currentClient);
@@ -459,7 +469,6 @@ namespace CppCLRWinFormsProject {
             }
         }
 
-        // ЛОГИКА НАВИГАЦИИ МЕЖДУ ВКЛАДКАМИ
         void ResetMenuButtons() {
             btnDashboard->BackColor = Color::Transparent;
             btnDashboard->ForeColor = Color::FromArgb(11, 0, 163);
@@ -644,7 +653,7 @@ namespace CppCLRWinFormsProject {
             this->SuspendLayout();
 
             this->Size = System::Drawing::Size(1150, 700);
-            this->Text = L"ООО \"ТМЫВ ДЕНЕГ\"";
+            this->Text = L"ООО \"БКС\"";
             this->StartPosition = FormStartPosition::CenterScreen;
             this->FormBorderStyle = System::Windows::Forms::FormBorderStyle::FixedSingle;
             this->MaximizeBox = false;
@@ -708,7 +717,7 @@ namespace CppCLRWinFormsProject {
             this->panelDashboardView->Dock = DockStyle::Fill;
             this->panelDashboardView->BackColor = bgContentGray;
 
-            this->lblLogoDash->Text = L"ООО \"ТМЫВ ДЕНЕГ\"";
+            this->lblLogoDash->Text = L"ООО \"БКС\"";
             this->lblLogoDash->Font = gcnew System::Drawing::Font("Arial", 16, FontStyle::Bold);
             this->lblLogoDash->Location = System::Drawing::Point(25, 20);
             this->lblLogoDash->Size = System::Drawing::Size(300, 35);
@@ -859,7 +868,7 @@ namespace CppCLRWinFormsProject {
             this->panelClientsView->Dock = DockStyle::Fill;
             this->panelClientsView->BackColor = bgContentGray;
 
-            this->lblLogoClients->Text = L"ООО \"ТМЫВ ДЕНЕГ\"";
+            this->lblLogoClients->Text = L"ООО \"БКС\"";
             this->lblLogoClients->Font = gcnew System::Drawing::Font("Arial", 16, FontStyle::Bold);
             this->lblLogoClients->Location = System::Drawing::Point(25, 20);
             this->lblLogoClients->Size = System::Drawing::Size(300, 35);
@@ -934,7 +943,7 @@ namespace CppCLRWinFormsProject {
             this->cardAboutInfo->BackColor = Color::White;
 
             Label^ lblSystemName = gcnew Label();
-            lblSystemName->Text = L"Автоматизированная Банковская Система «ООО ТМЫВ ДЕНЕГ»";
+            lblSystemName->Text = L"Автоматизированная Банковская Система «ООО Банк Кредитных Систем»";
             lblSystemName->Font = gcnew System::Drawing::Font("Arial", 12, FontStyle::Bold);
             lblSystemName->ForeColor = brandBlue;
             lblSystemName->Location = System::Drawing::Point(20, 15);
