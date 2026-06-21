@@ -1,5 +1,4 @@
 #pragma once
-
 #include "sqlite3.h"
 #include <string>
 #include <msclr/marshal_cppstd.h>
@@ -12,10 +11,10 @@ namespace CppCLRWinFormsProject {
 
     public ref class DatabaseManager {
     private:
+        // Безопасный маршалинг без ручного управления контекстом
         static std::string toNative(String^ managedStr) {
             if (managedStr == nullptr) return "";
-            msclr::interop::marshal_context context;
-            return context.marshal_as<std::string>(managedStr);
+            return msclr::interop::marshal_as<std::string>(managedStr);
         }
 
         static String^ toManaged(const char* nativeStr) {
@@ -24,20 +23,23 @@ namespace CppCLRWinFormsProject {
         }
 
     public:
-        // Инициализация таблиц
+        // Инициализация базы данных и создание индексов для ускорения выборок
         static void InitializeDatabase() {
             sqlite3* db;
             if (sqlite3_open("bank.db", &db) == SQLITE_OK) {
                 const char* sql =
                     "CREATE TABLE IF NOT EXISTS Clients (Id TEXT PRIMARY KEY, FullName TEXT, Phone TEXT);"
                     "CREATE TABLE IF NOT EXISTS Accounts (Number TEXT PRIMARY KEY, ClientId TEXT, Balance REAL, Type TEXT);"
-                    "CREATE TABLE IF NOT EXISTS Transactions (AccountNumber TEXT, Date TEXT, Type TEXT, Amount REAL);";
+                    "CREATE TABLE IF NOT EXISTS Transactions (AccountNumber TEXT, Date TEXT, Type TEXT, Amount REAL);"
+                    "CREATE INDEX IF NOT EXISTS idx_accounts_client ON Accounts (ClientId);"
+                    "CREATE INDEX IF NOT EXISTS idx_transactions_account ON Transactions (AccountNumber);";
+
                 sqlite3_exec(db, sql, nullptr, nullptr, nullptr);
                 sqlite3_close(db);
             }
         }
 
-        // Сохранение всех данных (полная перезапись базы)
+        // Сохранение всех данных (полная перезапись базы в одной транзакции)
         static void SaveAllData(List<Client^>^ clients) {
             sqlite3* db;
             if (sqlite3_open("bank.db", &db) != SQLITE_OK) return;
@@ -45,41 +47,52 @@ namespace CppCLRWinFormsProject {
             sqlite3_exec(db, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
             sqlite3_exec(db, "DELETE FROM Clients; DELETE FROM Accounts; DELETE FROM Transactions;", nullptr, nullptr, nullptr);
 
-            sqlite3_stmt* stmtC, * stmtA, * stmtT;
-            sqlite3_prepare_v2(db, "INSERT INTO Clients VALUES (?, ?, ?);", -1, &stmtC, nullptr);
-            sqlite3_prepare_v2(db, "INSERT INTO Accounts VALUES (?, ?, ?, ?);", -1, &stmtA, nullptr);
-            sqlite3_prepare_v2(db, "INSERT INTO Transactions VALUES (?, ?, ?, ?);", -1, &stmtT, nullptr);
+            sqlite3_stmt* stmtC = nullptr, * stmtA = nullptr, * stmtT = nullptr;
+
+            // Защита: проверяем, что все SQL-запросы скомпилировались успешно
+            if (sqlite3_prepare_v2(db, "INSERT INTO Clients VALUES (?, ?, ?);", -1, &stmtC, nullptr) != SQLITE_OK ||
+                sqlite3_prepare_v2(db, "INSERT INTO Accounts VALUES (?, ?, ?, ?);", -1, &stmtA, nullptr) != SQLITE_OK ||
+                sqlite3_prepare_v2(db, "INSERT INTO Transactions VALUES (?, ?, ?, ?);", -1, &stmtT, nullptr) != SQLITE_OK) {
+
+                if (stmtC) sqlite3_finalize(stmtC);
+                if (stmtA) sqlite3_finalize(stmtA);
+                if (stmtT) sqlite3_finalize(stmtT);
+                sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
+                sqlite3_close(db);
+                return;
+            }
 
             for each(Client ^ client in clients) {
-                sqlite3_bind_text(stmtC, 1, toNative(client->Id).c_str(), -1, SQLITE_TRANSIENT);
-                sqlite3_bind_text(stmtC, 2, toNative(client->FullName).c_str(), -1, SQLITE_TRANSIENT);
-                sqlite3_bind_text(stmtC, 3, toNative(client->Phone).c_str(), -1, SQLITE_TRANSIENT);
+                // Локальные std::string гарантируют, что c_str() будет жить до конца шага (step)
+                std::string cId = toNative(client->Id);
+                std::string cName = toNative(client->FullName);
+                std::string cPhone = toNative(client->Phone);
+
+                sqlite3_bind_text(stmtC, 1, cId.c_str(), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmtC, 2, cName.c_str(), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmtC, 3, cPhone.c_str(), -1, SQLITE_TRANSIENT);
                 sqlite3_step(stmtC);
                 sqlite3_reset(stmtC);
 
                 for each(BankAccount ^ acc in client->Accounts) {
-                    sqlite3_bind_text(stmtA, 1, toNative(acc->Number).c_str(), -1, SQLITE_TRANSIENT);
-                    sqlite3_bind_text(stmtA, 2, toNative(client->Id).c_str(), -1, SQLITE_TRANSIENT);
+                    std::string aNum = toNative(acc->Number);
+                    // Теперь берем чистый системный тип ("debit", "credit", "savings") напрямую
+                    std::string aType = toNative(acc->GetAccountType());
+
+                    sqlite3_bind_text(stmtA, 1, aNum.c_str(), -1, SQLITE_TRANSIENT);
+                    sqlite3_bind_text(stmtA, 2, cId.c_str(), -1, SQLITE_TRANSIENT);
                     sqlite3_bind_double(stmtA, 3, acc->Balance);
-
-                    // Унифицируем тип перед сохранением в БД, чтобы там всегда был чистый английский текст низким регистром
-                    String^ rawType = acc->GetAccountType();
-                    String^ dbType = "debit";
-
-                    if (rawType != nullptr) {
-                        rawType = rawType->Trim()->ToLower();
-                        if (rawType == "savings" || rawType == L"сберегательный") dbType = "savings";
-                        else if (rawType == "credit" || rawType == L"кредитный") dbType = "credit";
-                    }
-
-                    sqlite3_bind_text(stmtA, 4, toNative(dbType).c_str(), -1, SQLITE_TRANSIENT);
+                    sqlite3_bind_text(stmtA, 4, aType.c_str(), -1, SQLITE_TRANSIENT);
                     sqlite3_step(stmtA);
                     sqlite3_reset(stmtA);
 
                     for each(BankTransaction ^ tx in acc->History) {
-                        sqlite3_bind_text(stmtT, 1, toNative(acc->Number).c_str(), -1, SQLITE_TRANSIENT);
-                        sqlite3_bind_text(stmtT, 2, toNative(tx->Date).c_str(), -1, SQLITE_TRANSIENT);
-                        sqlite3_bind_text(stmtT, 3, toNative(tx->Type).c_str(), -1, SQLITE_TRANSIENT);
+                        std::string tDate = toNative(tx->Date);
+                        std::string tType = toNative(tx->Type);
+
+                        sqlite3_bind_text(stmtT, 1, aNum.c_str(), -1, SQLITE_TRANSIENT);
+                        sqlite3_bind_text(stmtT, 2, tDate.c_str(), -1, SQLITE_TRANSIENT);
+                        sqlite3_bind_text(stmtT, 3, tType.c_str(), -1, SQLITE_TRANSIENT);
                         sqlite3_bind_double(stmtT, 4, tx->Amount);
                         sqlite3_step(stmtT);
                         sqlite3_reset(stmtT);
@@ -94,16 +107,24 @@ namespace CppCLRWinFormsProject {
             sqlite3_close(db);
         }
 
-        // Загрузка всех данных
+        // Загрузка всех данных из базы
         static List<Client^>^ LoadAllData() {
             List<Client^>^ clients = gcnew List<Client^>();
             sqlite3* db;
             if (sqlite3_open("bank.db", &db) != SQLITE_OK) return clients;
 
-            sqlite3_stmt* stmtC, * stmtA, * stmtT;
-            sqlite3_prepare_v2(db, "SELECT * FROM Clients;", -1, &stmtC, nullptr);
-            sqlite3_prepare_v2(db, "SELECT Number, Balance, Type FROM Accounts WHERE ClientId = ?;", -1, &stmtA, nullptr);
-            sqlite3_prepare_v2(db, "SELECT Date, Type, Amount FROM Transactions WHERE AccountNumber = ?;", -1, &stmtT, nullptr);
+            sqlite3_stmt* stmtC = nullptr, * stmtA = nullptr, * stmtT = nullptr;
+
+            if (sqlite3_prepare_v2(db, "SELECT * FROM Clients;", -1, &stmtC, nullptr) != SQLITE_OK ||
+                sqlite3_prepare_v2(db, "SELECT Number, Balance, Type FROM Accounts WHERE ClientId = ?;", -1, &stmtA, nullptr) != SQLITE_OK ||
+                sqlite3_prepare_v2(db, "SELECT Date, Type, Amount FROM Transactions WHERE AccountNumber = ?;", -1, &stmtT, nullptr) != SQLITE_OK) {
+
+                if (stmtC) sqlite3_finalize(stmtC);
+                if (stmtA) sqlite3_finalize(stmtA);
+                if (stmtT) sqlite3_finalize(stmtT);
+                sqlite3_close(db);
+                return clients;
+            }
 
             while (sqlite3_step(stmtC) == SQLITE_ROW) {
                 String^ id = toManaged((const char*)sqlite3_column_text(stmtC, 0));
@@ -111,7 +132,9 @@ namespace CppCLRWinFormsProject {
                 String^ phone = toManaged((const char*)sqlite3_column_text(stmtC, 2));
                 Client^ client = gcnew Client(id, name, phone);
 
-                sqlite3_bind_text(stmtA, 1, toNative(id).c_str(), -1, SQLITE_TRANSIENT);
+                std::string nativeId = toNative(id);
+                sqlite3_bind_text(stmtA, 1, nativeId.c_str(), -1, SQLITE_TRANSIENT);
+
                 while (sqlite3_step(stmtA) == SQLITE_ROW) {
                     String^ num = toManaged((const char*)sqlite3_column_text(stmtA, 0));
                     double bal = sqlite3_column_double(stmtA, 1);
@@ -121,28 +144,29 @@ namespace CppCLRWinFormsProject {
                         type = type->Trim()->ToLower();
                     }
 
+                    // Четкое разделение типов на основе латинских строк из нового BankCore
                     BankAccount^ acc;
-                    // Распознаем любые вариации написания
-                    if (type == "debit" || type == L"дебетовый") {
-                        acc = gcnew DebitAccount(num, bal);
-                    }
-                    else if (type == "savings" || type == L"сберегательный") {
+                    if (type == "savings") {
                         acc = gcnew SavingsAccount(num, bal);
                     }
-                    else if (type == "credit" || type == L"кредитный") {
+                    else if (type == "credit") {
                         acc = gcnew CreditAccount(num, bal);
                     }
                     else {
+                        // По умолчанию или если "debit"
                         acc = gcnew DebitAccount(num, bal);
                     }
 
-                    sqlite3_bind_text(stmtT, 1, toNative(num).c_str(), -1, SQLITE_TRANSIENT);
+                    std::string nativeNum = toNative(num);
+                    sqlite3_bind_text(stmtT, 1, nativeNum.c_str(), -1, SQLITE_TRANSIENT);
+
                     while (sqlite3_step(stmtT) == SQLITE_ROW) {
-                        acc->History->Add(gcnew BankTransaction(
-                            toManaged((const char*)sqlite3_column_text(stmtT, 0)),
-                            toManaged((const char*)sqlite3_column_text(stmtT, 1)),
-                            sqlite3_column_double(stmtT, 2)
-                        ));
+                        // Точно сопоставляем индексы: 0 - Date, 1 - Type, 2 - Amount
+                        String^ tDate = toManaged((const char*)sqlite3_column_text(stmtT, 0));
+                        String^ tType = toManaged((const char*)sqlite3_column_text(stmtT, 1));
+                        double tAmount = sqlite3_column_double(stmtT, 2);
+
+                        acc->History->Add(gcnew BankTransaction(tDate, tType, tAmount));
                     }
                     sqlite3_reset(stmtT);
                     client->Accounts->Add(acc);

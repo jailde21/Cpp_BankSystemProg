@@ -29,25 +29,44 @@ namespace CppCLRWinFormsProject {
             Balance = bal;
             History = gcnew List<BankTransaction^>();
         }
+
+        // Этот метод используется для логики и сохранения в БД (всегда lowercase english)
         virtual String^ GetAccountType() abstract;
+
+        // Добавим свойство для красивого отображения на форме (UI)
+        virtual property String^ DisplayName{
+            String ^ get() abstract;
+        }
     };
 
     public ref class DebitAccount : public BankAccount {
     public:
         DebitAccount(String^ num, double bal) : BankAccount(num, bal) {}
-        virtual String^ GetAccountType() override { return L"Дебетовый"; }
+        virtual String^ GetAccountType() override { return "debit"; }
+
+        virtual property String^ DisplayName{
+            String ^ get() override { return L"Дебетовый"; }
+        }
     };
 
     public ref class SavingsAccount : public BankAccount {
     public:
         SavingsAccount(String^ num, double bal) : BankAccount(num, bal) {}
-        virtual String^ GetAccountType() override { return L"Сберегательный"; }
+        virtual String^ GetAccountType() override { return "savings"; }
+
+        virtual property String^ DisplayName{
+            String ^ get() override { return L"Сберегательный"; }
+        }
     };
 
     public ref class CreditAccount : public BankAccount {
     public:
         CreditAccount(String^ num, double bal) : BankAccount(num, bal) {}
-        virtual String^ GetAccountType() override { return L"Кредитный"; }
+        virtual String^ GetAccountType() override { return "credit"; }
+
+        virtual property String^ DisplayName{
+            String ^ get() override { return L"Кредитный"; }
+        }
     };
 
     public ref class Client {

@@ -203,10 +203,10 @@ namespace CppCLRWinFormsProject {
                 if (selectedType != nullptr) selectedType = selectedType->Trim()->ToLower();
 
                 for each(BankAccount ^ acc in currentClient->Accounts) {
-                    String^ accType = acc->GetAccountType();
-                    if (accType != nullptr) accType = accType->Trim()->ToLower();
+                    String^ accType = acc->GetAccountType(); // "savings", "debit", "credit"
 
-                    if (accType == selectedType || (accType == L"сберегательный" && selectedType == "savings")) {
+                    // ИСПРАВЛЕНО: Безопасное сравнение по системным именам
+                    if (accType == "savings" && (selectedType == "savings" || selectedType->Contains(L"сберег"))) {
                         double interest = acc->Balance * (pct / 100.0);
                         acc->Balance += interest;
                         acc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Проценты", interest));
@@ -235,10 +235,13 @@ namespace CppCLRWinFormsProject {
             }
             if (targetAcc == nullptr) return;
 
+            // Передаем системный тип для корректной настройки дочерней формы
             AccountOperationForm^ form = gcnew AccountOperationForm(AccountOpType::Withdraw, targetAcc->GetAccountType());
             if (form->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
                 double amt = Double::Parse(form->EnteredAmount);
-                if (targetAcc->Balance >= amt || targetAcc->GetAccountType() == L"Кредитный") {
+
+                // ИСПРАВЛЕНО: Проверяем овердрафт по системному типу "credit"
+                if (targetAcc->Balance >= amt || targetAcc->GetAccountType() == "credit") {
                     targetAcc->Balance -= amt;
                     targetAcc->History->Add(gcnew BankTransaction(DateTime::Now.ToString("yyyy-MM-dd"), L"Снятие", amt));
 
@@ -344,7 +347,9 @@ namespace CppCLRWinFormsProject {
 
             for each(BankAccount ^ acc in cl->Accounts) {
                 total += acc->Balance;
-                gridAccounts->Rows->Add(acc->GetAccountType(), acc->Number, acc->Balance.ToString("N2") + " BYN");
+
+                // ИСПРАВЛЕНО: Вместо сырого "debit"/"savings" пишем красивое русское имя DisplayName
+                gridAccounts->Rows->Add(acc->DisplayName, acc->Number, acc->Balance.ToString("N2") + " BYN");
 
                 for each(BankTransaction ^ tr in acc->History) {
                     String^ selectedFilter = cbFilterType->SelectedItem->ToString();
@@ -353,6 +358,7 @@ namespace CppCLRWinFormsProject {
                     }
                 }
             }
+            
 
             int sortIndex = cbSortCriterion->SelectedIndex;
             if (sortIndex == 0) filteredTransactions->Sort(gcnew Comparison<BankTransaction^>(&Form1::CompareByDateDesc));
