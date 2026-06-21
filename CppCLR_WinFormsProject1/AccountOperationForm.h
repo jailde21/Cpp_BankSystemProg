@@ -80,6 +80,52 @@ namespace CppCLRWinFormsProject {
     private:
         System::ComponentModel::Container^ components;
 
+        void RoundCorners(Control^ control, int radius) {
+            System::Drawing::Drawing2D::GraphicsPath^ path = gcnew System::Drawing::Drawing2D::GraphicsPath();
+            path->StartFigure();
+            path->AddArc(0, 0, radius, radius, 180, 90);
+            path->AddArc(control->Width - radius, 0, radius, radius, 270, 90);
+            path->AddArc(control->Width - radius, control->Height - radius, radius, radius, 0, 90);
+            path->AddArc(0, control->Height - radius, radius, radius, 90, 90);
+            path->CloseFigure();
+            control->Region = gcnew System::Drawing::Region(path);
+        }
+
+        // Обработчик события Load
+        void AccountOperationForm_Load(System::Object^ sender, System::EventArgs^ e) {
+            RoundCorners(this->btnConfirm, 15);
+            RoundCorners(this->btnCancel, 15);
+        }
+
+        // НОВЫЙ МЕТОД: Рисование идеальной сглаженной рамки для кнопки Отмена
+        void btnCancel_Paint(System::Object^ sender, System::Windows::Forms::PaintEventArgs^ e) {
+            Button^ btn = dynamic_cast<Button^>(sender);
+            if (btn == nullptr) return;
+
+            // Включаем сглаживание углов (антиалиасинг)
+            e->Graphics->SmoothingMode = System::Drawing::Drawing2D::SmoothingMode::AntiAlias;
+
+            float radius = 15.0f;
+            System::Drawing::Drawing2D::GraphicsPath^ path = gcnew System::Drawing::Drawing2D::GraphicsPath();
+            float offset = 0.5f;
+            float width = btn->Width - 1.0f;
+            float height = btn->Height - 1.0f;
+
+            path->StartFigure();
+            path->AddArc(System::Drawing::RectangleF(offset, offset, radius, radius), 180, 90);
+            path->AddArc(System::Drawing::RectangleF(width - radius, offset, radius, radius), 270, 90);
+            path->AddArc(System::Drawing::RectangleF(width - radius, height - radius, radius, radius), 0, 90);
+            path->AddArc(System::Drawing::RectangleF(offset, height - radius, radius, radius), 90, 90);
+            path->CloseFigure();
+
+            Color brandBlue = Color::FromArgb(11, 0, 163);
+            Pen^ borderPen = gcnew Pen(brandBlue, 1.5f); // Толщина линии рамки
+            e->Graphics->DrawPath(borderPen, path);
+
+            delete borderPen;
+            delete path;
+        }
+
         void InitializeComponent(void)
         {
             Color brandBlue = Color::FromArgb(11, 0, 163);
@@ -144,6 +190,7 @@ namespace CppCLRWinFormsProject {
             // btnCancel
             this->btnCancel->BackColor = System::Drawing::Color::White;
             this->btnCancel->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
+            this->btnCancel->FlatAppearance->BorderSize = 0; // ИСПРАВЛЕНО: убираем системную обводку кнопок, чтобы не косячились углы
             this->btnCancel->Font = (gcnew System::Drawing::Font(L"Arial", 10, System::Drawing::FontStyle::Bold));
             this->btnCancel->ForeColor = brandBlue;
             this->btnCancel->Location = System::Drawing::Point(200, 210);
@@ -169,6 +216,11 @@ namespace CppCLRWinFormsProject {
             this->MinimizeBox = false;
             this->StartPosition = System::Windows::Forms::FormStartPosition::CenterParent;
             this->Text = L"Действие со счетом";
+
+            // ПОДПИСКИ НА СОБЫТИЯ
+            this->Load += gcnew System::EventHandler(this, &AccountOperationForm::AccountOperationForm_Load);
+            this->btnCancel->Paint += gcnew System::Windows::Forms::PaintEventHandler(this, &AccountOperationForm::btnCancel_Paint);
+
             this->ResumeLayout(false);
             this->PerformLayout();
         }

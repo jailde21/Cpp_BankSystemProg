@@ -613,8 +613,11 @@ namespace CppCLRWinFormsProject {
         void InitializeComponent(void)
         {
             Color brandBlue = Color::FromArgb(11, 0, 163);
-            Color bgContentGray = Color::FromArgb(226, 232, 240);
+            Color bgContentGray = Color::FromArgb(226, 232, 240); // Светло-серый фон для разделов
             Color brightRed = Color::Crimson;
+
+            // НОВАЯ ПЕРЕМЕННАЯ: Делаем фон бокового меню чуть темнее
+            Color bgSidebarGray = Color::FromArgb(203, 213, 225);
 
             this->panelSidebar = (gcnew Panel());
             this->panelContentArea = (gcnew Panel());
@@ -666,7 +669,7 @@ namespace CppCLRWinFormsProject {
 
             this->panelSidebar->Size = System::Drawing::Size(180, 700);
             this->panelSidebar->Dock = DockStyle::Left;
-            this->panelSidebar->BackColor = bgContentGray;
+            this->panelSidebar->BackColor = bgSidebarGray; // ИСПРАВЛЕНО: Теперь панель меню использует более темный оттенок
 
             this->lblMenuTitle->Text = L"МЕНЮ";
             this->lblMenuTitle->Font = gcnew System::Drawing::Font("Arial", 14, FontStyle::Bold);
@@ -745,7 +748,7 @@ namespace CppCLRWinFormsProject {
             this->cardClientInfo->Size = System::Drawing::Size(450, 200);
             this->cardClientInfo->BackColor = Color::White;
 
-            this->lblInfoTitle->Text = L"   Информация о клиенте";
+            this->lblInfoTitle->Text = L"    Информация о клиенте";
             this->lblInfoTitle->BackColor = brandBlue;
             this->lblInfoTitle->ForeColor = Color::White;
             this->lblInfoTitle->Font = gcnew System::Drawing::Font("Arial", 12, FontStyle::Bold);
