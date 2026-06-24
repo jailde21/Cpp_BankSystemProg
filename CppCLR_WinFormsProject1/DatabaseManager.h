@@ -11,7 +11,7 @@ namespace CppCLRWinFormsProject {
 
     public ref class DatabaseManager {
     private:
-        // Безопасный маршалинг без ручного управления контекстом
+        
         static std::string toNative(String^ managedStr) {
             if (managedStr == nullptr) return "";
             return msclr::interop::marshal_as<std::string>(managedStr);
@@ -39,7 +39,7 @@ namespace CppCLRWinFormsProject {
             }
         }
 
-        // Сохранение всех данных (полная перезапись базы в одной транзакции)
+        // Сохранение всех данных 
         static void SaveAllData(List<Client^>^ clients) {
             sqlite3* db;
             if (sqlite3_open("bank.db", &db) != SQLITE_OK) return;
@@ -49,7 +49,6 @@ namespace CppCLRWinFormsProject {
 
             sqlite3_stmt* stmtC = nullptr, * stmtA = nullptr, * stmtT = nullptr;
 
-            // Защита: проверяем, что все SQL-запросы скомпилировались успешно
             if (sqlite3_prepare_v2(db, "INSERT INTO Clients VALUES (?, ?, ?);", -1, &stmtC, nullptr) != SQLITE_OK ||
                 sqlite3_prepare_v2(db, "INSERT INTO Accounts VALUES (?, ?, ?, ?);", -1, &stmtA, nullptr) != SQLITE_OK ||
                 sqlite3_prepare_v2(db, "INSERT INTO Transactions VALUES (?, ?, ?, ?);", -1, &stmtT, nullptr) != SQLITE_OK) {
@@ -63,7 +62,6 @@ namespace CppCLRWinFormsProject {
             }
 
             for each(Client ^ client in clients) {
-                // Локальные std::string гарантируют, что c_str() будет жить до конца шага (step)
                 std::string cId = toNative(client->Id);
                 std::string cName = toNative(client->FullName);
                 std::string cPhone = toNative(client->Phone);
@@ -76,7 +74,6 @@ namespace CppCLRWinFormsProject {
 
                 for each(BankAccount ^ acc in client->Accounts) {
                     std::string aNum = toNative(acc->Number);
-                    // Теперь берем чистый системный тип ("debit", "credit", "savings") напрямую
                     std::string aType = toNative(acc->GetAccountType());
 
                     sqlite3_bind_text(stmtA, 1, aNum.c_str(), -1, SQLITE_TRANSIENT);
@@ -144,7 +141,7 @@ namespace CppCLRWinFormsProject {
                         type = type->Trim()->ToLower();
                     }
 
-                    // Четкое разделение типов на основе латинских строк из нового BankCore
+                    // Четкое разделение типов
                     BankAccount^ acc;
                     if (type == "savings") {
                         acc = gcnew SavingsAccount(num, bal);
@@ -153,7 +150,7 @@ namespace CppCLRWinFormsProject {
                         acc = gcnew CreditAccount(num, bal);
                     }
                     else {
-                        // По умолчанию или если "debit"
+                        
                         acc = gcnew DebitAccount(num, bal);
                     }
 
@@ -161,7 +158,7 @@ namespace CppCLRWinFormsProject {
                     sqlite3_bind_text(stmtT, 1, nativeNum.c_str(), -1, SQLITE_TRANSIENT);
 
                     while (sqlite3_step(stmtT) == SQLITE_ROW) {
-                        // Точно сопоставляем индексы: 0 - Date, 1 - Type, 2 - Amount
+                        
                         String^ tDate = toManaged((const char*)sqlite3_column_text(stmtT, 0));
                         String^ tType = toManaged((const char*)sqlite3_column_text(stmtT, 1));
                         double tAmount = sqlite3_column_double(stmtT, 2);

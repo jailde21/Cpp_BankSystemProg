@@ -10,7 +10,6 @@ namespace CppCLRWinFormsProject {
     using namespace System::Data;
     using namespace System::Drawing;
 
-    // Перечисление, из-за потери которого лезли 162 ошибки
     public enum class AccountOpType {
         Deposit,
         Withdraw,
@@ -21,12 +20,12 @@ namespace CppCLRWinFormsProject {
     public ref class AccountOperationForm : public System::Windows::Forms::Form
     {
     public:
-        // Свойства, через которые Form1 забирает результаты
         property String^ SelectedAccountType;
         property String^ EnteredAmount;
 
     private:
         AccountOpType currentOpType;
+        String^ initialAccType; // <--- ДОБАВЛЕНО: Та самая переменная для хранения типа счета
 
         // UI Элементы
         Label^ lblTitle;
@@ -42,8 +41,9 @@ namespace CppCLRWinFormsProject {
         {
             InitializeComponent();
             currentOpType = opType;
+            initialAccType = defaultAccType; // <--- ДОБАВЛЕНО: Сохраняем тип при открытии окна
 
-            // Динамическая подстройка интерфейса в зависимости от типа операции
+            // Динамическая подстройка интерфейса
             if (opType == AccountOpType::Deposit) {
                 lblTitle->Text = L"Пополнение счета";
                 lblAmount->Text = L"Сумма пополнения (BYN):";
@@ -63,7 +63,7 @@ namespace CppCLRWinFormsProject {
             }
             else if (opType == AccountOpType::Open) {
                 lblTitle->Text = L"Открытие нового счета";
-                txtAmount->Visible = false; // Сумму при открытии вводить не нужно
+                txtAmount->Visible = false;
                 lblAmount->Visible = false;
                 if (defaultAccType != nullptr) cbAccountType->SelectedItem = defaultAccType;
             }
@@ -91,18 +91,15 @@ namespace CppCLRWinFormsProject {
             control->Region = gcnew System::Drawing::Region(path);
         }
 
-        // Обработчик события Load
         void AccountOperationForm_Load(System::Object^ sender, System::EventArgs^ e) {
             RoundCorners(this->btnConfirm, 15);
             RoundCorners(this->btnCancel, 15);
         }
 
-        // НОВЫЙ МЕТОД: Рисование идеальной сглаженной рамки для кнопки Отмена
         void btnCancel_Paint(System::Object^ sender, System::Windows::Forms::PaintEventArgs^ e) {
             Button^ btn = dynamic_cast<Button^>(sender);
             if (btn == nullptr) return;
 
-            // Включаем сглаживание углов (антиалиасинг)
             e->Graphics->SmoothingMode = System::Drawing::Drawing2D::SmoothingMode::AntiAlias;
 
             float radius = 15.0f;
@@ -119,7 +116,7 @@ namespace CppCLRWinFormsProject {
             path->CloseFigure();
 
             Color brandBlue = Color::FromArgb(11, 0, 163);
-            Pen^ borderPen = gcnew Pen(brandBlue, 1.5f); // Толщина линии рамки
+            Pen^ borderPen = gcnew Pen(brandBlue, 1.5f);
             e->Graphics->DrawPath(borderPen, path);
 
             delete borderPen;
@@ -139,7 +136,6 @@ namespace CppCLRWinFormsProject {
             this->btnCancel = (gcnew System::Windows::Forms::Button());
             this->SuspendLayout();
 
-            // lblTitle
             this->lblTitle->Font = (gcnew System::Drawing::Font(L"Arial", 14, System::Drawing::FontStyle::Bold));
             this->lblTitle->ForeColor = brandBlue;
             this->lblTitle->Location = System::Drawing::Point(20, 20);
@@ -147,14 +143,12 @@ namespace CppCLRWinFormsProject {
             this->lblTitle->Text = L"Операция по счету";
             this->lblTitle->TextAlign = System::Drawing::ContentAlignment::MiddleCenter;
 
-            // lblAccountType
             this->lblAccountType->AutoSize = true;
             this->lblAccountType->Font = (gcnew System::Drawing::Font(L"Arial", 10));
             this->lblAccountType->Location = System::Drawing::Point(30, 70);
             this->lblAccountType->Size = System::Drawing::Size(80, 16);
             this->lblAccountType->Text = L"Тип счета:";
 
-            // cbAccountType
             this->cbAccountType->DropDownStyle = System::Windows::Forms::ComboBoxStyle::DropDownList;
             this->cbAccountType->Font = (gcnew System::Drawing::Font(L"Arial", 11));
             this->cbAccountType->FormattingEnabled = true;
@@ -163,19 +157,16 @@ namespace CppCLRWinFormsProject {
             this->cbAccountType->Size = System::Drawing::Size(320, 25);
             this->cbAccountType->SelectedIndex = 0;
 
-            // lblAmount
             this->lblAmount->AutoSize = true;
             this->lblAmount->Font = (gcnew System::Drawing::Font(L"Arial", 10));
             this->lblAmount->Location = System::Drawing::Point(30, 130);
             this->lblAmount->Size = System::Drawing::Size(54, 16);
             this->lblAmount->Text = L"Сумма:";
 
-            // txtAmount
             this->txtAmount->Font = (gcnew System::Drawing::Font(L"Arial", 12));
             this->txtAmount->Location = System::Drawing::Point(30, 150);
             this->txtAmount->Size = System::Drawing::Size(320, 26);
 
-            // btnConfirm
             this->btnConfirm->BackColor = brandBlue;
             this->btnConfirm->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
             this->btnConfirm->FlatAppearance->BorderSize = 0;
@@ -187,10 +178,9 @@ namespace CppCLRWinFormsProject {
             this->btnConfirm->UseVisualStyleBackColor = false;
             this->btnConfirm->Click += gcnew System::EventHandler(this, &AccountOperationForm::btnConfirm_Click);
 
-            // btnCancel
             this->btnCancel->BackColor = System::Drawing::Color::White;
             this->btnCancel->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
-            this->btnCancel->FlatAppearance->BorderSize = 0; // ИСПРАВЛЕНО: убираем системную обводку кнопок, чтобы не косячились углы
+            this->btnCancel->FlatAppearance->BorderSize = 0;
             this->btnCancel->Font = (gcnew System::Drawing::Font(L"Arial", 10, System::Drawing::FontStyle::Bold));
             this->btnCancel->ForeColor = brandBlue;
             this->btnCancel->Location = System::Drawing::Point(200, 210);
@@ -199,7 +189,6 @@ namespace CppCLRWinFormsProject {
             this->btnCancel->UseVisualStyleBackColor = false;
             this->btnCancel->Click += gcnew System::EventHandler(this, &AccountOperationForm::btnCancel_Click);
 
-            // Настройка самой формы (AccountOperationForm)
             this->AutoScaleDimensions = System::Drawing::SizeF(6, 13);
             this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
             this->BackColor = System::Drawing::Color::FromArgb(245, 247, 250);
@@ -217,7 +206,6 @@ namespace CppCLRWinFormsProject {
             this->StartPosition = System::Windows::Forms::FormStartPosition::CenterParent;
             this->Text = L"Действие со счетом";
 
-            // ПОДПИСКИ НА СОБЫТИЯ
             this->Load += gcnew System::EventHandler(this, &AccountOperationForm::AccountOperationForm_Load);
             this->btnCancel->Paint += gcnew System::Windows::Forms::PaintEventHandler(this, &AccountOperationForm::btnCancel_Paint);
 
@@ -226,26 +214,38 @@ namespace CppCLRWinFormsProject {
         }
 
         void btnConfirm_Click(System::Object^ sender, System::EventArgs^ e) {
-            // Защита от дурака: если не открытие счета, проверяем чтобы сумма была корректной
+            // Защита от дурака: если не открытие счета, проверяем сумму
             if (currentOpType != AccountOpType::Open) {
                 if (String::IsNullOrWhiteSpace(txtAmount->Text)) {
                     MessageBox::Show(L"Пожалуйста, введите сумму!", L"Внимание", MessageBoxButtons::OK, MessageBoxIcon::Warning);
                     return;
                 }
                 double val = 0;
-                // Проверяем, что введено именно число и оно больше нуля (меняем запятую на точку, если нужно)
-                String^ amountText = txtAmount->Text->Replace(".", ",");
+                // ИСПРАВЛЕНО: одинарные кавычки для символов
+                String^ amountText = txtAmount->Text->Replace('.', ',');
                 if (!Double::TryParse(amountText, val) || val <= 0) {
                     MessageBox::Show(L"Значение должно быть положительным числом!", L"Ошибка", MessageBoxButtons::OK, MessageBoxIcon::Error);
                     return;
                 }
             }
 
-            // Передаем данные в публичные свойства
-            this->SelectedAccountType = cbAccountType->SelectedItem->ToString();
-            this->EnteredAmount = txtAmount->Text->Replace(".", ",");
+            // ПРАВИЛЬНОЕ ИСПРАВЛЕНИЕ ТИПА СЧЕТА
+            if (currentOpType == AccountOpType::Open) {
+                if (cbAccountType->SelectedItem != nullptr) {
+                    this->SelectedAccountType = cbAccountType->SelectedItem->ToString();
+                }
+                else {
+                    this->SelectedAccountType = L"Дебетовый";
+                }
+            }
+            else {
+                // Жестко берем исходный тип счета, чтобы не сбрасывалось
+                this->SelectedAccountType = this->initialAccType;
+            }
 
-            // Возвращаем сигнал об успехе и закрываемся
+            // ИСПРАВЛЕНО: одинарные кавычки для символов
+            this->EnteredAmount = txtAmount->Text->Replace('.', ',');
+
             this->DialogResult = System::Windows::Forms::DialogResult::OK;
             this->Close();
         }
